@@ -38,6 +38,7 @@ func uploadPipeline(plugin Plugin, generatePipeline PipelineGenerator) (string, 
 	if err != nil {
 		return "", []string{}, err
 	}
+	log.Debugf("steps to trigger: %v", steps)
 
 	pipeline, err := generatePipeline(steps, plugin)
 	defer os.Remove(pipeline.Name())
@@ -84,6 +85,7 @@ func stepsToTrigger(files []string, watch []WatchConfig) ([]Step, error) {
 		for _, p := range w.Paths {
 			for _, f := range files {
 				match, err := matchPath(p, f)
+				log.Debugf("Path match: %s", p)
 				if err != nil {
 					return nil, err
 				}
@@ -140,6 +142,7 @@ func dedupSteps(steps []Step) []Step {
 func generatePipeline(steps []Step, plugin Plugin) (*os.File, error) {
 	tmp, err := ioutil.TempFile(os.TempDir(), "bmrd-")
 	pipeline := Pipeline{Steps: steps}
+	log.Debugf("pipeline: %v", pipeline)
 
 	if err != nil {
 		return nil, fmt.Errorf("could not create temporary pipeline file: %v", err)
