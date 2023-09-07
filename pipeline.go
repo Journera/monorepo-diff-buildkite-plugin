@@ -12,9 +12,31 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// Pipeline is Buildkite pipeline definition
-type Pipeline struct {
-	Steps []Step
+// WaitStep represents a Buildkite Wait Step
+// https://buildkite.com/docs/pipelines/wait-step
+// We can't use Step here since the value for Wait is always nil
+// regardless of whether or not we want to include the key.
+type WaitStep struct{}
+
+func (WaitStep) MarshalYAML() (interface{}, error) {
+	return map[string]interface{}{
+		"wait": nil,
+	}, nil
+}
+
+func (s Step) MarshalYAML() (interface{}, error) {
+	if s.Group == "" {
+		type Alias Step
+		return (Alias)(s), nil
+	}
+
+	label := s.Group
+	s.Group = ""
+	return Group{Label: label, Steps: []Step{s}}, nil
+}
+
+func (n PluginNotify) MarshalYAML() (interface{}, error) {
+	return n, nil
 }
 
 // PipelineGenerator generates pipeline file
@@ -55,27 +77,24 @@ func uploadPipeline(plugin Plugin, generatePipeline PipelineGenerator) (string, 
 		args = append(args, "--no-interpolation")
 	}
 
-	executeCommand("buildkite-agent", args)
+	_, err = executeCommand("buildkite-agent", args)
 
-	return cmd, args, nil
+	return cmd, args, err
 }
 
 func diff(command string) ([]string, error) {
 	log.Infof("Running diff command: %s", command)
 
-	split := strings.Split(command, " ")
-	cmd, args := split[0], split[1:]
+	output, err := executeCommand(
+		env("SHELL", "bash"),
+		[]string{"-c", strings.Replace(command, "\n", " ", -1)},
+	)
 
-	output, err := executeCommand(cmd, args)
 	if err != nil {
 		return nil, fmt.Errorf("diff command failed: %v", err)
 	}
 
-	f := func(c rune) bool {
-		return c == '\n'
-	}
-
-	return strings.FieldsFunc(strings.TrimSpace(output), f), nil
+	return strings.Fields(strings.TrimSpace(output)), nil
 }
 
 func stepsToTrigger(files []string, watch []WatchConfig) ([]Step, error) {
@@ -141,6 +160,7 @@ func dedupSteps(steps []Step) []Step {
 
 func generatePipeline(steps []Step, plugin Plugin) (*os.File, error) {
 	tmp, err := ioutil.TempFile(os.TempDir(), "bmrd-")
+
 	pipeline := Pipeline{Steps: steps}
 	log.Debugf("pipeline: %v", pipeline)
 
@@ -148,17 +168,36 @@ func generatePipeline(steps []Step, plugin Plugin) (*os.File, error) {
 		return nil, fmt.Errorf("could not create temporary pipeline file: %v", err)
 	}
 
-	data, err := yaml.Marshal(&pipeline)
-	if err != nil {
-		return nil, fmt.Errorf("could not serialize the pipeline: %v", err)
+	yamlSteps := make([]yaml.Marshaler, len(steps))
+
+	for i, step := range steps {
+		yamlSteps[i] = step
 	}
 
 	if plugin.Wait {
-		data = append(data, "- wait"...)
+		yamlSteps = append(yamlSteps, WaitStep{})
 	}
 
 	for _, cmd := range plugin.Hooks {
-		data = append(data, "\n- command: "+cmd.Command...)
+		yamlSteps = append(yamlSteps, Step{Command: cmd.Command})
+	}
+
+	yamlNotify := make([]yaml.Marshaler, len(plugin.Notify))
+	for i, n := range plugin.Notify {
+		yamlNotify[i] = n
+	}
+
+	pipeline := map[string][]yaml.Marshaler{
+		"steps": yamlSteps,
+	}
+
+	if len(yamlNotify) > 0 {
+		pipeline["notify"] = yamlNotify
+	}
+
+	data, err := yaml.Marshal(&pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("could not serialize the pipeline: %v", err)
 	}
 
 	// Disable logging in context of go tests.

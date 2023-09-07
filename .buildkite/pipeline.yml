@@ -1,16 +1,9 @@
 steps:
-  - label: ":lint-roller: Lint"
+  - label: ":bomb: Triggers"
     plugins:
-      - docker-compose#v3.3.0:
-          run: plugin_lint
-  - label: ":test_tube: Tests"
-    plugins:
-      - docker-compose#v3.3.0:
-          run: plugin_test
-  - label: ":bomb: Triggering Plugin Version (2.0.3)"
-    plugins:
-      - chronotc/monorepo-diff#v2.0.3:
+      - monebag/monorepo-diff:
           diff: "cat ./e2e/one-match-one-miss"
+          log_level: "debug"
           watch:
             - path: "foo-service/"
               config:
@@ -18,12 +11,42 @@ steps:
             - path: "hello-service/"
               config:
                 trigger: "this-pipeline-does-not-exists"
+            - path: "foo-service/"
+              config:
+                command: "echo running command"
+                notify:
+                  - slack: "#alerts"
           hooks:
             - command: echo "command hook 1"
             - command: echo "command hook 2"
-  - label: ":bomb: Triggering Plugin Version (2.0.4)"
+
+  - label: ":bomb: Testing notifications"
     plugins:
-      - chronotc/monorepo-diff#v2.0.4:
+      - monebag/monorepo-diff:
+          diff: "cat ./e2e/multiple-paths"
+          notify:
+            - email: subash@monebag.com
+          watch:
+            - path:
+                - "user-service/infrastructure/"
+              config:
+                command: "echo i-am-running-in-a-group"
+
+  - label: ":bomb: Testing groups"
+    plugins:
+      - monebag/monorepo-diff#v2.5.7:
+          diff: "cat ./e2e/multiple-paths"
+          watch:
+            - path:
+                - "user-service/infrastructure/"
+                - "product-service/infrastructure/"
+              config:
+                group: "my group"
+                command: "echo i-am-running-in-a-group"
+
+  - label: ":bomb: Testing hooks"
+    plugins:
+      - monebag/monorepo-diff#v2.5.7:
           diff: "cat ./e2e/multiple-paths"
           watch:
             - path: "user-service/"
@@ -40,9 +63,10 @@ steps:
                 trigger: "this-pipeline-does-not-exists"
           hooks:
             - command: echo "command hook 1"
-  - label: ":bomb: Triggering Plugin Version (2.0.5)"
+
+  - label: ":bomb: Testing wait"
     plugins:
-      - chronotc/monorepo-diff#v2.0.5:
+      - monebag/monorepo-diff:
           diff: "cat ./e2e/multiple-paths"
           watch:
             - path:
@@ -51,9 +75,10 @@ steps:
               config:
                 command: "echo i-am-running"
           wait: true
-  - label: ":bomb: Triggering Plugin Version (latest)"
+
+  - label: ":bomb: Testing triggers and commands"
     plugins:
-      - chronotc/monorepo-diff:
+      - monebag/monorepo-diff:
           diff: "cat ./e2e/commands-or-triggers"
           watch:
             - path: "user-service/"
@@ -75,4 +100,9 @@ steps:
             - path:
                 - "do-not-run-command/"
               config:
+                command: "echo this-does-not-run"
+            - path:
+                - "global/"
+              config:
+                group: "this is a group"
                 command: "echo this-does-not-run"

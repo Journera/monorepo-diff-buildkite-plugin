@@ -1,15 +1,16 @@
-FROM golang:1.17.2 as go
+FROM goreleaser/goreleaser:v1.13.1-amd64 as go
 
 WORKDIR /plugin
 
 COPY . .
 
-RUN make clean build-linux
+RUN goreleaser build --rm-dist --skip-validate --config .goreleaser-test.yml
 
-FROM buildkite/plugin-tester
+FROM buildkite/plugin-tester:v3.0.1
 
-COPY . .
+COPY tests /plugin/tests
+COPY hooks /plugin/hooks
 
 COPY --from=go \
-  /plugin/monorepo-diff-buildkite-plugin-linux-amd64 \
-  monorepo-diff-buildkite-plugin-linux-amd64
+  /plugin/dist/monorepo-diff-buildkite-plugin_linux_amd64_v1/monorepo-diff-buildkite-plugin \
+  monorepo-diff-buildkite-plugin

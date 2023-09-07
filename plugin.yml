@@ -1,6 +1,6 @@
 name: Monorepo Diff
 description: Trigger pipelines on changes in watched folders
-author: https://github.com/chronotc
+author: https://github.com/monebag
 requirements:
   - git
 configuration:
@@ -13,6 +13,26 @@ configuration:
       type: boolean
     env:
       type: array
+    notify:
+      type: [array]
+      properties:
+        email:
+          type: string
+        webhook:
+          type: string
+        pagerduty_change_event:
+          type: string
+        basecamp_campfire:
+          type: string
+        github_commit_status:
+          type: object
+          properties:
+            context:
+              type: string
+        slack:
+          type: string
+        if:
+          type: string
     watch:
       type: array
       properties:
@@ -26,6 +46,22 @@ configuration:
               type: string
             trigger:
               type: string
+            soft_fail:
+              type: [object, boolean]
+            notify:
+              type: [array]
+              properties:
+                basecamp_campfire:
+                  type: string
+                github_commit_status:
+                  type: object
+                  properties:
+                    context:
+                      type: string
+                slack:
+                  type: string
+                if:
+                  type: string
             async:
               type: boolean
             label:
@@ -41,11 +77,15 @@ configuration:
                   type: string
                 env:
                   type: array
+                meta_data:
+                  type: object
             agents:
               type: object
               properties:
                 queue:
                   type: string
+              additionalProperties:
+                type: string
             artifacts:
               type: array
             env:
@@ -59,3 +99,5 @@ configuration:
           type: string
   required:
     - watch
+
+# yaml-language-server: $schema=https://raw.githubusercontent.com/buildkite-plugins/buildkite-plugin-linter/master/lib/plugin-yaml-schema.yml

@@ -19,18 +19,25 @@ func setupLogger(logLevel string) {
 }
 
 // Version of plugin
-var Version string
+var version string = "dev"
 
 func main() {
-	log.Infof("--- :one: monorepo-diff %s", Version)
+	log.Infof("--- running monorepo-diff-buildkite-plugin %s", version)
 
-	plugin, err := initializePlugin(env("BUILDKITE_PLUGINS", ""))
+	plugins := env("BUILDKITE_PLUGINS", "")
+
+	log.Debugf("received plugin: \n%v", plugins)
+
+	plugin, err := initializePlugin(plugins)
 
 	if err != nil {
+		log.Debug(err)
 		log.Fatal(err)
 	}
 
 	setupLogger(plugin.LogLevel)
 
-	uploadPipeline(plugin, generatePipeline)
+	if _, _, err = uploadPipeline(plugin, generatePipeline); err != nil {
+		log.Fatalf("+++ failed to upload pipeline: %v", err)
+	}
 }

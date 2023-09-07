@@ -20,7 +20,7 @@ func TestPluginWithInvalidParameter(t *testing.T) {
 
 func TestPluginShouldHaveDefaultValues(t *testing.T) {
 	param := `[{
-		"github.com/chronotc/monorepo-diff-buildkite-plugin#commit": {}
+		"github.com/monebag/monorepo-diff-buildkite-plugin#commit": {}
 	}]`
 
 	got, _ := initializePlugin(param)
@@ -37,15 +37,16 @@ func TestPluginShouldHaveDefaultValues(t *testing.T) {
 
 func TestPluginWithValidParameter(t *testing.T) {
 	param := ""
-	got, _ := initializePlugin(param)
+	got, err := initializePlugin(param)
 	expected := Plugin{}
 
+	assert.EqualError(t, err, "failed to parse plugin configuration")
 	assert.Equal(t, expected, got)
 }
 
 func TestPluginShouldUnmarshallCorrectly(t *testing.T) {
 	param := `[{
-		"github.com/chronotc/monorepo-diff-buildkite-plugin#commit": {
+		"github.com/monebag/monorepo-diff-buildkite-plugin#commit": {
 			"diff": "cat ./hello.txt",
 			"wait": true,
 			"log_level": "debug",
@@ -59,20 +60,47 @@ func TestPluginShouldUnmarshallCorrectly(t *testing.T) {
 				"env2=env-2",
 				"env3"
 			],
+		"notify": [
+				{ "email": "foo@gmail.com" },
+				{ "email": "bar@gmail.com" },
+				{ "basecamp_campfire": "https://basecamp-url" },
+				{ "webhook": "https://webhook-url", "if": "build.state === 'failed'" },
+				{ "pagerduty_change_event": "636d22Yourc0418Key3b49eee3e8" },
+				{ "github_commit_status": { "context" : "my-custom-status" } },
+				{ "slack": "@someuser", "if": "build.state === 'passed'" }
+			],
 			"watch": [
 				{
 					"path": "watch-path-1",
 					"config": {
 						"trigger": "service-2",
 						"build": {
-							"message": "some message"
+							"message": "some message",
+							"meta_data": {
+								"foo": "bar"
+							}
 						}
 					}
 				},
 				{
 					"path": "watch-path-1",
 					"config": {
-						"command": "echo hello-world"
+						"command": "echo hello-world",
+						"env": [
+							"env4", "hi= bye"
+						],
+						"soft_fail": [{
+							"exit_status": "*"
+						}],
+						"notify": [
+							{ "email": "foo@gmail.com" },
+							{ "email": "bar@gmail.com" },
+							{ "basecamp_campfire": "https://basecamp-url" },
+							{ "webhook": "https://webhook-url", "if": "build.state === 'failed'" },
+							{ "pagerduty_change_event": "636d22Yourc0418Key3b49eee3e8" },
+							{ "github_commit_status": { "context" : "my-custom-status" } },
+							{ "slack": "@someuser", "if": "build.state === 'passed'" }
+						]
 					}
 				},
 				{
@@ -94,13 +122,24 @@ func TestPluginShouldUnmarshallCorrectly(t *testing.T) {
 						},
 						"async": true,
 						"agents": {
-							"queue": "queue-1"
+							"queue": "queue-1",
+							"database": "postgres"
 						},
 						"artifacts": [ "artifiact-1" ],
+						"soft_fail": [{
+							"exit_status": 127
+						}]
+					}
+				},
+				{
+					"path": "watch-path-1",
+					"config": {
+						"group": "my group",
+						"command": "echo hello-group",
 						"env": [
-							"foo = bar",
-							"env4"
-						]
+							"env4", "hi= bye"
+						],
+						"soft_fail": true
 					}
 				}
 			]
@@ -123,16 +162,20 @@ func TestPluginShouldUnmarshallCorrectly(t *testing.T) {
 			"env2": "env-2",
 			"env3": "env-3",
 		},
+		Notify: []PluginNotify{
+			{Email: "foo@gmail.com"},
+			{Email: "bar@gmail.com"},
+			{Basecamp: "https://basecamp-url"},
+			{Webhook: "https://webhook-url", Condition: "build.state === 'failed'"},
+			{PagerDuty: "636d22Yourc0418Key3b49eee3e8"},
+			{GithubStatus: GithubStatusNotification{Context: "my-custom-status"}},
+			{Slack: "@someuser", Condition: "build.state === 'passed'"},
+		},
 		Watch: []WatchConfig{
 			{
 				Paths: []string{"watch-path-1"},
 				Step: Step{
 					Trigger: "service-2",
-					Env: map[string]string{
-						"env1": "env-1",
-						"env2": "env-2",
-						"env3": "env-3",
-					},
 					Build: Build{
 						Message: "some message",
 						Branch:  "go-rewrite",
@@ -141,6 +184,9 @@ func TestPluginShouldUnmarshallCorrectly(t *testing.T) {
 							"env1": "env-1",
 							"env2": "env-2",
 							"env3": "env-3",
+						},
+						MetaData: map[string]string{
+							"foo": "bar",
 						},
 					},
 				},
@@ -153,6 +199,14 @@ func TestPluginShouldUnmarshallCorrectly(t *testing.T) {
 						"env1": "env-1",
 						"env2": "env-2",
 						"env3": "env-3",
+						"env4": "env-4",
+						"hi":   "bye",
+					},
+					SoftFail: []interface{}{map[string]interface{}{"exit_status": "*"}},
+					Notify: []StepNotify{
+						{Basecamp: "https://basecamp-url"},
+						{GithubStatus: GithubStatusNotification{Context: "my-custom-status"}},
+						{Slack: "@someuser", Condition: "build.state === 'passed'"},
 					},
 				},
 			},
@@ -174,19 +228,92 @@ func TestPluginShouldUnmarshallCorrectly(t *testing.T) {
 						},
 					},
 					Async:     true,
-					Agents:    Agent{Queue: "queue-1"},
+					Agents:    map[string]string{"queue": "queue-1", "database": "postgres"},
 					Artifacts: []string{"artifiact-1"},
+					SoftFail: []interface{}{map[string]interface{}{
+						"exit_status": float64(127),
+					}},
+				},
+			},
+			{
+				Paths: []string{"watch-path-1"},
+				Step: Step{
+					Group:   "my group",
+					Command: "echo hello-group",
 					Env: map[string]string{
-						"foo":  "bar",
 						"env1": "env-1",
 						"env2": "env-2",
 						"env3": "env-3",
 						"env4": "env-4",
+						"hi":   "bye",
 					},
+					SoftFail: true,
 				},
 			},
 		},
 	}
 
 	assert.Equal(t, expected, got)
+}
+
+func TestPluginShouldOnlyFullyUnmarshallItselfAndNotOtherPlugins(t *testing.T) {
+	param := `[
+		{
+			"github.com/example/example-plugin#commit": {
+				"env": {
+					"EXAMPLE_TOKEN": {
+						"json-key": ".TOKEN",
+						"secret-id": "global/example/token"
+					}
+				}
+			}
+		},
+		{
+			"github.com/monebag/monorepo-diff-buildkite-plugin#commit": {
+				"watch": [
+					{
+						"env": [
+							"EXAMPLE_TOKEN"
+						],
+						"path": [
+							".buildkite/**/*"
+						],
+						"config": {
+							"label": "Example label",
+							"command": "echo hello world\\n"
+						}
+					}
+				]
+			}
+		}
+	]
+	`
+	_, err := initializePlugin(param)
+	assert.NoError(t, err)
+}
+
+func TestPluginShouldErrorIfPluginConfigIsInvalid(t *testing.T) {
+	param := `[
+		{
+			"github.com/monebag/monorepo-diff-buildkite-plugin#commit": {
+				"env": {
+					"anInvalidKey": "An Invalid Value"
+				},
+				"watch": [
+					{
+						"path": [
+							".buildkite/**/*"
+						],
+						"config": {
+							"label": "Example label",
+							"command": "echo hello world\\n"
+						}
+					}
+				]
+			}
+		}
+	]
+	`
+	_, err := initializePlugin(param)
+	assert.Error(t, err)
 }
